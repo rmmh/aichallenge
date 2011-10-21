@@ -1031,7 +1031,7 @@ CanvasElementGraph.prototype.checkState = function() {
  * it's last turn.
  */
 CanvasElementGraph.prototype.draw = function() {
-	var min, max, i, k, t, scaleX, scaleY, txt, x, y, tw, tx, hills, razed;
+	var min, max, i, k, t, txt, x, y, tw, tx, razed;
 	var w = this.w - 1;
 	var h = this.h - 1;
 	var replay = this.state.replay;
@@ -1040,8 +1040,7 @@ CanvasElementGraph.prototype.draw = function() {
 	this.ctx.fillRect(0, 0, this.w, this.h);
 	this.ctx.font = '10px Arial,Sans';
 
-	// find lowest and highest value
-	min = 0;
+	// find highest value
 	max = -Infinity;
 	for (i = 0; i <= this.duration; i++) {
 		for (k = 0; k < values[i].length; k++) {
@@ -1051,31 +1050,44 @@ CanvasElementGraph.prototype.draw = function() {
 		}
 	}
 
+	// calculate scaling factors and functions
+	var xScale = (this.duration === 0) ? 0 : w / this.duration;
+	var yScale = h / max;
+	var maxLog = Math.log(max + 1);
+	var yLogScale = h / maxLog;
+
+	var scaleX = function(x) {
+		return 0.5 + xScale * x;
+	}
+	var scaleY = function(y) {
+		var linScale = 0.5 + yScale * (max - y);
+		var logScale = 0.5 + yLogScale * (maxLog - Math.log(y + 1));
+		return linScale * .65 + logScale * .35;
+	}
+
 	// draw ticks
-	scaleX = (this.duration === 0) ? 0 : w / this.duration;
 	this.ctx.strokeStyle = 'rgba(0,0,0,0.5)';
 	this.ctx.beginPath();
-	for (k = 1; k * scaleX < 2;) {
+	for (k = 1; k * xScale < 2;) {
 		k *= 10;
 	}
 	for (i = k - 1; i <= this.duration + 1; i += k) {
 		t = ((i + 1) % (100 * k) ? (i + 1) % (10 * k) ? 3 : 7 : 11);
-		this.ctx.moveTo(0.5 + scaleX * i, h - t);
-		this.ctx.lineTo(0.5 + scaleX * i, h + 1);
+		this.ctx.moveTo(scaleX(i), h - t);
+		this.ctx.lineTo(scaleX(i), h + 1);
 	}
 	this.ctx.moveTo(0.5 + 0, h + 0.5);
-	this.ctx.lineTo(0.5 + scaleX * (this.duration + 1), h + 0.5);
+	this.ctx.lineTo(scaleX(this.duration + 1), h + 0.5);
 	this.ctx.stroke();
-	scaleY = h / (max - min);
 
 	// hill razes
 	this.ctx.textAlign = 'center';
-	hills = this.state.replay.meta['replaydata']['hills'];
+	var hills = this.state.replay.meta['replaydata']['hills'];
 	for (k = 0; k < hills.length; k++) {
 		razed = hills[k][3] < this.state.replay.duration;
 		if (razed && values[hills[k][3]]) {
-			x = 0.5 + scaleX * hills[k][3];
-			y = 0.5 + scaleY * (max - values[hills[k][3]][hills[k][2]]);
+			x = scaleX(hills[k][3]);
+			y = scaleY(values[hills[k][3]][hills[k][2]]);
 			this.ctx.fillStyle = replay.htmlPlayerColors[hills[k][2]];
 			this.ctx.beginPath();
 			this.ctx.moveTo(x, y);
@@ -1091,9 +1103,9 @@ CanvasElementGraph.prototype.draw = function() {
 	for (i = values[0].length - 1; i >= 0; i--) {
 		this.ctx.strokeStyle = replay.htmlPlayerColors[i];
 		this.ctx.beginPath();
-		this.ctx.moveTo(0.5, 0.5 + scaleY * (max - values[0][i]));
+		this.ctx.moveTo(0.5, scaleY(values[0][i]));
 		for (k = 1; k <= this.duration; k++) {
-			this.ctx.lineTo(0.5 + scaleX * k, 0.5 + scaleY * (max - values[k][i]));
+			this.ctx.lineTo(scaleX(k), scaleY(values[k][i]));
 		}
 		this.ctx.stroke();
 	}
@@ -1103,8 +1115,8 @@ CanvasElementGraph.prototype.draw = function() {
 			this.ctx.strokeStyle = replay.htmlPlayerColors[i];
 			k = replay.meta['playerturns'][i];
 			this.ctx.beginPath();
-			x = 0.5 + k * scaleX;
-			y = 0.5 + scaleY * (max - values[k][i]);
+			x = scaleX(k);
+			y = scaleY(values[k][i]);
 			this.ctx.moveTo(x, y);
 			txt = this.statusToGlyph(i);
 			tw = this.ctx.measureText(txt).width;
@@ -1325,6 +1337,19 @@ CanvasElementStats.prototype.drawColorBar = function(x, y, w, h, stats, bonusTex
 	var sumPositive = 0;
 	var sumValues, sum;
 	var xOffset = x;
+
+	// calculate how wide a (nonnegative) value should be when rendered
+	// in the stats bar
+	if (this.caption === "# of ants") {
+		var scale = function(x) { 
+			return x / 20. + Math.log(x + 1);
+		}
+	} else {
+		var scale = function(x) { 
+			return x;		
+		}			
+	}
+
 	var drawPart = function(ctx, pixels, div, list, values, state, arrow, label) {
 		var k, kIdx, wBarRaw, wBar, textWidth;
 		ctx.save();
@@ -1332,7 +1357,7 @@ CanvasElementStats.prototype.drawColorBar = function(x, y, w, h, stats, bonusTex
 			kIdx = state.order[list[k]];
 			ctx.fillStyle = state.replay.htmlPlayerColors[kIdx];
 			if (div) {
-				wBarRaw = Math.abs(values[kIdx]) * pixels / div;
+				wBarRaw = scale(Math.abs(values[kIdx])) * pixels / div;
 			} else {
 				wBarRaw = pixels / values.length;
 			}
@@ -1389,7 +1414,7 @@ CanvasElementStats.prototype.drawColorBar = function(x, y, w, h, stats, bonusTex
 	for (i = 0; i < stats.values.length; i++) {
 		if (stats.bonus !== undefined && stats.bonus[i]) {
 			boni[i] = stats.bonus[i];
-			sumBoni += boni[i];
+			sumBoni += scale(boni[i]);
 			showBoni = true;
 		} else {
 			boni[i] = 0;
@@ -1402,10 +1427,10 @@ CanvasElementStats.prototype.drawColorBar = function(x, y, w, h, stats, bonusTex
 		idx = this.state.order[i];
 		if (stats.values[idx] >= 0) {
 			positives.push(i);
-			sumPositive += stats.values[idx];
+			sumPositive += scale(stats.values[idx]);
 		} else {
 			negatives.push(i);
-			sumNegative -= stats.values[idx];
+			sumNegative -= scale(stats.values[idx]);
 		}
 	}
 	sumValues = sumNegative + sumPositive;

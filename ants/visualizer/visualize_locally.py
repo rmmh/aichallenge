@@ -1,10 +1,12 @@
 #!/usr/bin/env python
 
+import hashlib
 import re
 import sys
 import os
 import webbrowser
 import json
+
 
 def generate(data, generated_path):
     path = os.path.dirname(__file__)
@@ -26,7 +28,7 @@ def generate(data, generated_path):
     newline_re = re.compile("\s", re.MULTILINE)
     insert_re = re.compile(r"## REPLAY PLACEHOLDER ##")
     path_re = re.compile(r"## PATH PLACEHOLDER ##")
-    
+
     try:
         json.loads(data)
         data = quote_re.sub(r"\\\\'", data)
@@ -35,29 +37,41 @@ def generate(data, generated_path):
         data = data.replace('\n', '\\\\n')
 
     content = path_re.sub(mod_path, content)
-    content = insert_re.sub(data, content)   
-       
+    content = insert_re.sub(data, content)
+
     output = open(generated_path, 'w')
     output.write(content)
     output.close()
 
+
 def launch(filename=None, nolaunch=False, generated_path=None):
-    if generated_path == None:
-        generated_path = 'replay.html'
-    if filename == None:
-        data = sys.stdin.read()
-        generated_path = os.path.realpath(os.path.join(os.path.dirname(__file__)
-                                                       , generated_path))
+    if generated_path is None:
+        generated_path = "replay.html"
+
+    if filename:
+        fin = open(filename)
     else:
-        with open(filename, 'r') as f:
-            data = f.read()
-        generated_path = os.path.join(os.path.split(filename)[0], generated_path)
+        fin = sys.stdin
+
+    data = fin.read()
+
+    generated_path = os.path.realpath(os.path.join(os.path.dirname(__file__),
+                                                    generated_path))
 
     generate(data, generated_path)
 
     # open the page in the browser
     if not nolaunch:
-        webbrowser.open('file://'+os.path.realpath(generated_path))    
+        webbrowser.open('file://' + generated_path)
 
 if __name__ == "__main__":
-    launch(nolaunch=len(sys.argv) > 1 and sys.argv[1] == '--nolaunch')
+    if len(sys.argv) > 1 and sys.argv[1] == '--nolaunch':
+        sys.argv.remove(1)
+        nolaunch = True
+    else:
+        nolaunch = False
+
+    if len(sys.argv) > 1:
+        launch(filename=sys.argv[1], nolaunch=nolaunch)
+    else:
+        launch(nolaunch=nolaunch)
